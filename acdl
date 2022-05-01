@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+
+###############
+## Variables ##
+###############
+
+img_viewer="sxiv"
+viewer_opts="-tpo -z 200"
+pages=1
+output="${HOME}/Wallpapers/alphacoders"
+cachedir="${HOME}/.cache/alphacoders"
+silent=false
+
+function fallback {
+	rofi -dmenu -p "Search AlphaCoders:"
+}
+
+#######################
+## General Functions ##
+#######################
+
+function help {
+	printf "\n"
+	printf "\x1B[32mAlphaCoders Scraper Script by is0n:\n"
+	printf "\n"
+	printf "\x1B[33mUSAGE:\n"
+	printf "     \x1B[35macdl \x1B[31m[FLAGS]\n"
+	printf "\n"
+	printf "\x1B[31mFLAGS:\n\x1B[37m"
+	printf "     \x1B[34m--pages,   -p    \x1B[37mNumber of \x1B[34mpages\x1B[37m to scrape (each with 30 images)\n"
+	printf "     \x1B[34m--cache,   -c    \x1B[37mDirectory used to \x1B[34mcache\x1B[37m thumbnails\n"
+	printf "     \x1B[34m--output,  -o    \x1B[34mOutput\x1B[37m directory used to store wallpapers\n"
+	printf "     \x1B[34m--query,   -q    \x1B[37mSearch \x1B[34mquery\x1B[37m (fallback to rofi/dmenu)\n"
+	printf "     \x1B[34m--dmenu,   -d    \x1B[37mFallback to \x1B[34mdmenu\x1B[37m instead of rofi\n"
+	printf "     \x1B[34m--help,    -h    \x1B[37mPrint this \x1B[34mhelp\n"
+	printf "\n"
+}
+
+function notification {
+	[ "${silent}" == "true" ] && return
+	notify-send "Alphacoders:" "${@}"
+	printf "%s\n" "${@}"
+}
+
+function cleanup {
+	notification "Cleaning Up..."
+	rm -rf "${cachedir}"
+}
+
+#####################
+## Arguments/Flags ##
+#####################
+
+[ -e "${HOME}/.config/acdlrc" ] && . "${HOME}/.config/acdlrc"
+
+while [[ $# -ge 1 ]]; do
+	case "$1" in
+	-p | --pages)
+		[ -z "${2}" ] && break
+		pages=${2}
+		shift
+		;;
+	-c | --cache)
+		[ -z "${2}" ] && break
+		cachedir="${2}"
+		shift
+		;;
+	-o | --output)
+		[ -z "${2}" ] && break
+		output="${2}"
+		shift
+		;;
+	-q | --query)
+		[ -z "${2}" ] && break
+		query="${2}"
+		shift
+		;;
+	-d | --dmenu)
+		function fallback {
+			: | dmenu -p "Search AlphaCoders:"
+		}
+		;;
+	-s | --silent)
+		silent=true
+		;;
+	-h | --help)
+		help
+		exit
+		;;
+	*)
+		printf "unknown option: %s\\n" "${1}"
+		printf "see: \'acdl --help\'\n"
+		exit
+		;;
+	esac
+	shift
+done
+
+####################
+## Query Handling ##
+####################
+
+[ -z "${query}" ] && query=$(fallback)
+[ -z "${query}" ] && exit
+query=$(printf "%s" "${query}" | sed "s/ /+/g")
+
+#######################
+## Start Up Commands ##
+#######################
+
+rm -rf "${cachedir}"
+trap "cleanup" EXIT
+mkdir -p "${output}" "${cachedir}"
+
+##################
+## URL Handling ##
+##################
+
+url="https://wall.alphacoders.com/search.php?search=${query}"
+[ -z "$(curl -s "${url}")" ] && url="$(curl -L -s -w "%{url_effective}" "${url}" -o /dev/null)"
+[ -z "$(grep "/tag/" <<< "${url}")" ] && data="&page=" || data="?page="
+
+##################
+## Recieve Data ##
+##################
+
+notification "Recieving data..."
+thumbnails=$(
+	for page_no in $(seq ${pages}); do
+		curl -s "${url}${data}${page_no}" |
+			grep -Eo "(http|https)://images[a-zA-Z0-9./?=_%:-]*thumb[a-zA-Z0-9./?=_%:-]*" |
+			grep -v webp &
+	done
+	wait
+)
+[ -z "${thumbnails}" ] && notification "No wallpapers found" && exit
+
+######################
+## Cache Thumbnails ##
+######################
+
+notification "Caching thumbnails..."
+for thumbnail in ${thumbnails}; do
+	printf "url = %s\n" "${thumbnail}"
+	printf "output = %s\n" "${cachedir}/${thumbnail##*-}"
+done | curl -s -Z -K -
+
+####################
+## User Selection ##
+####################
+
+selection=$(${img_viewer} ${viewer_opts} "${cachedir}" 2>/dev/null)
+[ -z "$selection" ] && exit
+
+#########################
+## Download Wallpapers ##
+#########################
+
+ids=$(printf "%s\n" "${selection}" | sed 's/.*\///;s/\.[^.]*$//')
+ids=$(printf "%s\n" ${ids} | sed "s/ /|/g")
+
+notification "Downloading wallpapers..."
+images=$(printf "%s\n" ${thumbnails} | grep -E "${ids}")
+for image in ${images}; do
+	tail=${image##*-}
+	tail=${tail:0:3}
+	head=${image%%.*}
+	head=${head##*/}
+	printf "url = %s\n" "https://${head}.alphacoders.com/${tail}/${image##*-}"
+	printf "output = %s\n" "${output}/${image##*-}"
+done | curl -s -Z -K -
+
+${img_viewer} "${output}" 2>/dev/null
