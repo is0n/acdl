@@ -19,7 +19,7 @@ Heavily inspired by [waldl](https://github.com/pystardust/waldl).
 - An image viewer (default is [sxiv](https://github.com/muennich/sxiv))
 
 ## Demonstration:
-![Demonstration](https://gitlab.com/is0n/acdl/uploads/df1c305bf26fbb3150383d8d49e3c6aa/video.mp4)
+https://user-images.githubusercontent.com/57725322/166166240-1f76cd47-85ac-4d69-bf12-4d89c796bbc6.mp4
 
 ## Usage:
 See `acdl --help`.
