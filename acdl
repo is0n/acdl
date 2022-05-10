@@ -110,7 +110,6 @@ query=$(printf "%s" "${query}" | sed "s/ /+/g")
 
 rm -rf "${cachedir}"
 trap "cleanup" EXIT
-mkdir -p "${output}" "${cachedir}"
 
 ##################
 ## URL Handling ##
@@ -140,6 +139,7 @@ thumbnails=$(
 ######################
 
 notification "Caching thumbnails..."
+mkdir -p "${cachedir}"
 for thumbnail in ${thumbnails}; do
 	printf "url = %s\n" "${thumbnail}"
 	printf "output = %s\n" "${cachedir}/${thumbnail##*-}"
@@ -160,6 +160,7 @@ ids=$(printf "%s\n" "${selection}" | sed 's/.*\///;s/\.[^.]*$//')
 ids=$(printf "%s\n" ${ids} | sed "s/ /|/g")
 
 notification "Downloading wallpapers..."
+mkdir -p "${output}"
 images=$(printf "%s\n" ${thumbnails} | grep -E "${ids}")
 for image in ${images}; do
 	tail=${image##*-}
